@@ -8,8 +8,6 @@
 import UIKit
 
 import NMapsMap
-import SnapKit
-import Then
 
 final class RNMarker: NMFMarker {
     
@@ -25,7 +23,7 @@ final class RNMarker: NMFMarker {
 
 extension RNMarker {
     private func setUI() {
-        let image = NMFOverlayImage(image: ImageLiterals.icMapPoint)
+        let image = NMFOverlayImage(image: ImageLiterals.icMapPoint) // 비트맵 공유를 통한 메모리 관리
         self.iconImage = image
         
         self.width = CGFloat(NMF_MARKER_SIZE_AUTO)

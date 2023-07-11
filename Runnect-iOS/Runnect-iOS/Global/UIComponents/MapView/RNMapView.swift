@@ -4,6 +4,7 @@
 //
 //  Created by sejin on 2023/01/02.
 //
+
 import UIKit
 import CoreLocation
 import Combine
@@ -38,14 +39,14 @@ final class RNMapView: UIView {
         [self.startMarker.position] + self.markers.map { $0.position }
     }
     private var bottomPadding: CGFloat = 0
-    private let locationOverlayIcon = NMFOverlayImage(image: ImageLiterals.icLocationOverlay)
+    private let locationOverlayIcon = NMFOverlayImage(image: ImageLiterals.icLocationOverlay)   // 현재 위치 오버레이
     
     // MARK: - UI Components
     
     let map = NMFNaverMapView()
     private var startMarker = RNStartMarker()
     private let pathOverlay = NMFPath()
-    private let locationButton = UIButton(type: .custom)
+    private let moveToUserlocationButton = UIButton(type: .custom) // 현재 사용자 위치로 화면 이동하는 버튼
     
     // MARK: - initialization
     
@@ -54,19 +55,14 @@ final class RNMapView: UIView {
         self.mapInit()
     }
     
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        self.mapInit()
-        setLocationOverlay()
-    }
-    
     private func mapInit() {
         setUI()
         setLayout()
         setDelegate()
         setMap()
-        getLocationAuth()
+        startUpdatingUserLocation()
         setPathOverlay()
+        setLocationOverlay()
     }
     
     required init?(coder: NSCoder) {
@@ -148,26 +144,6 @@ extension RNMapView {
         return self
     }
     
-    /// 캡처를 위한 좌표 설정 및 카메라 이동
-    func makeCameraMoveForCapture(at locations: [NMGLatLng]) {
-        map.mapView.contentInset = UIEdgeInsets(top: screenHeight/4, left: 0, bottom: screenHeight/4, right: 0)
-        let bounds = makeMBR(at: locations)
-        let cameraUpdate = NMFCameraUpdate(fit: bounds, padding: 100)
-        cameraUpdate.animation = .none
-        LoadingIndicator.showLoading()
-        map.mapView.moveCamera(cameraUpdate) { isCancelled in
-            if isCancelled {
-                print("카메라 이동 취소")
-                LoadingIndicator.hideLoading()
-            } else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.makePathImage()
-                    LoadingIndicator.hideLoading()
-                }
-            }
-        }
-    }
-    
     /// 사용자 위치로 카메라 이동
     @discardableResult
     func moveToUserLocation() -> Self {
@@ -179,6 +155,13 @@ extension RNMapView {
             self.map.mapView.moveCamera(cameraUpdate)
         }
         return self
+    }
+    
+    /// 사용자 위치 가져오기
+    func getUserLocation() -> NMGLatLng {
+        let userLocation = locationManager.location?.coordinate
+        let userLatLng = userLocation.toNMGLatLng()
+        return userLatLng
     }
     
     /// 지정 위치로 카메라 이동
@@ -204,10 +187,10 @@ extension RNMapView {
         return self
     }
     
-    /// locationButton 설정
+    /// moveToUserlocationButton 설정
     @discardableResult
-    func showLocationButton(toShow: Bool) -> Self {
-        self.locationButton.isHidden = !toShow
+    func showMoveToUserLocationButton(toShow: Bool) -> Self {
+        self.moveToUserlocationButton.isHidden = !toShow
         return self
     }
     
@@ -232,37 +215,9 @@ extension RNMapView {
         return self.markersLatLngs
     }
     
-    /// 사용자 위치 가져오기
-    func getUserLocation() -> NMGLatLng {
-        let userLocation = locationManager.location?.coordinate
-        let userLatLng = userLocation.toNMGLatLng()
-        return userLatLng
-    }
-    
     /// 경로 총 거리 가져오기
     func getPathDistance() -> Double {
         return pathDistance
-    }
-    
-    /// 더미 뷰를 UIImage로 변환하여 pathImage에 send
-    func makePathImage() {
-        if let image = UIImage.imageFromView(view: map.mapView) {
-            guard let newImage = self.cropImage(inputImage: image) else {
-                print("이미지 생성 실패")
-                return
-            }
-            self.pathImage.send(newImage)
-        }
-    }
-    
-    /// 현재 시점까지의 마커들을 캡쳐하여 pahImage에 send
-    func capturePathImage() {
-        makeCameraMoveForCapture(at: self.markersLatLngs)
-    }
-    
-    /// 바운더리(MBR) 생성
-    func makeMBR(at locations: [NMGLatLng]) -> NMGLatLngBounds {
-        return NMGLatLngBounds(latLngs: locations)
     }
     
     /// 직전의 마커 생성을 취소하고 경로선도 제거
@@ -305,13 +260,45 @@ extension RNMapView {
         map.mapView.logoAlign = .rightTop
     }
     
-    private func getLocationAuth() {
+    private func startUpdatingUserLocation() {
         DispatchQueue.global().async { [self] in
             if CLLocationManager.locationServicesEnabled() {
                 print("위치 상태 On 상태")
                 self.locationManager.startUpdatingLocation()
             } else {
                 print("위치 상태 Off 상태")
+            }
+        }
+    }
+}
+
+// MARK: - UI & Layout
+
+extension RNMapView {
+    private func setUI() {
+        self.backgroundColor = .white
+        self.moveToUserlocationButton.setImage(ImageLiterals.icMapLocation, for: .normal)
+        self.moveToUserlocationButton.isHidden = true
+        self.moveToUserlocationButton.addTarget(self, action: #selector(locationButtonDidTap), for: .touchUpInside)
+    }
+    
+    private func setLayout() {
+        addSubviews(map, moveToUserlocationButton)
+        
+        map.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+        }
+        
+        moveToUserlocationButton.snp.makeConstraints { make in
+            make.bottom.equalToSuperview().inset(88+bottomPadding)
+            make.trailing.equalToSuperview().inset(12)
+        }
+    }
+    
+    private func updateSubviewsConstraints() {
+        [moveToUserlocationButton].forEach { view in
+            view.snp.updateConstraints { make in
+                make.bottom.equalToSuperview().inset(98+bottomPadding)
             }
         }
     }
@@ -337,38 +324,6 @@ extension RNMapView {
     }
 }
 
-// MARK: - UI & Layout
-
-extension RNMapView {
-    private func setUI() {
-        self.backgroundColor = .white
-        self.locationButton.setImage(ImageLiterals.icMapLocation, for: .normal)
-        self.locationButton.isHidden = true
-        self.locationButton.addTarget(self, action: #selector(locationButtonDidTap), for: .touchUpInside)
-    }
-    
-    private func setLayout() {
-        addSubviews(map, locationButton)
-        
-        map.snp.makeConstraints { make in
-            make.edges.equalToSuperview()
-        }
-        
-        locationButton.snp.makeConstraints { make in
-            make.bottom.equalToSuperview().inset(88+bottomPadding)
-            make.trailing.equalToSuperview().inset(12)
-        }
-    }
-    
-    private func updateSubviewsConstraints() {
-        [locationButton].forEach { view in
-            view.snp.updateConstraints { make in
-                make.bottom.equalToSuperview().inset(98+bottomPadding)
-            }
-        }
-    }
-}
-
 // MARK: - @objc Function
 
 extension RNMapView {
@@ -382,7 +337,7 @@ extension RNMapView {
 extension RNMapView: NMFMapViewCameraDelegate, NMFMapViewTouchDelegate {
     // 지도 탭 이벤트
     func mapView(_ mapView: NMFMapView, didTapMap latlng: NMGLatLng, point: CGPoint) {
-        guard isDrawMode && markers.count < 19 else { return }
+        guard isDrawMode && markers.count < 20 else { return }
         self.makeMarker(at: latlng)
     }
     
@@ -397,6 +352,47 @@ extension RNMapView: NMFMapViewCameraDelegate, NMFMapViewTouchDelegate {
 extension RNMapView: CLLocationManagerDelegate {}
 
 extension RNMapView {
+    /// 현재 시점까지의 마커들을 캡쳐하여 pahImage에 send
+    func capturePathImage() {
+        makeCameraMoveForCapture(at: self.markersLatLngs)
+    }
+    
+    /// 캡처를 위한 좌표 설정 및 카메라 이동
+    private func makeCameraMoveForCapture(at locations: [NMGLatLng]) {
+        map.mapView.contentInset = UIEdgeInsets(top: screenHeight/4, left: 0, bottom: screenHeight/4, right: 0)
+        let bounds = makeMBR(at: locations)
+        let cameraUpdate = NMFCameraUpdate(fit: bounds, padding: 100)
+        cameraUpdate.animation = .none
+        LoadingIndicator.showLoading()
+        map.mapView.moveCamera(cameraUpdate) { isCancelled in
+            if isCancelled {
+                print("카메라 이동 취소")
+                LoadingIndicator.hideLoading()
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.makePathImage()
+                    LoadingIndicator.hideLoading()
+                }
+            }
+        }
+    }
+    
+    /// 바운더리(MBR) 생성
+    private func makeMBR(at locations: [NMGLatLng]) -> NMGLatLngBounds {
+        return NMGLatLngBounds(latLngs: locations)
+    }
+    
+    /// 지도 뷰를 UIImage로 변환하여 pathImage에 send
+    private func makePathImage() {
+        if let image = UIImage.imageFromView(view: map.mapView) {
+            guard let newImage = self.cropImage(inputImage: image) else {
+                print("이미지 생성 실패")
+                return
+            }
+            self.pathImage.send(newImage)
+        }
+    }
+    
     func cropImage(inputImage image: UIImage) -> UIImage? {
         let y = screenHeight > 800 ? screenHeight/4 + 150 : screenHeight/4 - 40
         return UIImage.cropImage(image, toRect: CGRect(x: 0, y: y, width: screenWidth*2, height: 500.adjustedH), viewWidth: screenWidth, viewHeight: 400.adjustedH)

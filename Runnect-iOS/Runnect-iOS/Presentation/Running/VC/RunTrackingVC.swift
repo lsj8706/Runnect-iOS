@@ -111,7 +111,7 @@ final class RunTrackingVC: UIViewController {
     }
     
     private let mapView = RNMapView()
-        .showLocationButton(toShow: true)
+        .showMoveToUserLocationButton(toShow: true)
         .makeContentPadding(padding: UIEdgeInsets(top: 100, left: 0, bottom: 0, right: 0))
         .setPositionMode(mode: .normal)
     

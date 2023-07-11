@@ -8,8 +8,6 @@
 import UIKit
 
 import NMapsMap
-import SnapKit
-import Then
 
 final class RNStartMarker: NMFMarker {
     

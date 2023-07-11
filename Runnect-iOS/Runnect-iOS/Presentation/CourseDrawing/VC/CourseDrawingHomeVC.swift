@@ -21,7 +21,7 @@ final class CourseDrawingHomeVC: UIViewController {
         .setPositionMode(mode: .normal)
         .makeContentPadding(padding: UIEdgeInsets(top: -calculateTopInset(), left: 0, bottom: tabBarHeight, right: 0))
         .moveToUserLocation()
-        .showLocationButton(toShow: true)
+        .showMoveToUserLocationButton(toShow: true)
     
     private let drawCourseButton = CustomButton(title: "코스 그리기")
     
